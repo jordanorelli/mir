@@ -2,9 +2,10 @@ package main
 
 import (
 	"sync"
+	"os"
 )
 
-var shutdownHandlers []func()
+var shutdownHandlers []func() error
 var shutdownOnce sync.Once
 
 func shutdown(cause error) {
@@ -25,6 +26,6 @@ func shutdown(cause error) {
 	})
 }
 
-func onShutdown(f func()) {
+func onShutdown(f func() error) {
 	shutdownHandlers = append(shutdownHandlers, f)
 }

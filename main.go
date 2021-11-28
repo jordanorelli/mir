@@ -16,17 +16,12 @@ var log_error = log.New(os.Stderr, "", 0)
 var log_info = log.New(os.Stdout, "", 0)
 
 func bail(status int, t string, args ...interface{}) {
-	if status != nil {
+	if status != 0 {
 		shutdown(fmt.Errorf(t, args...))
 	} else {
-		log_info.Printf
+		log_info.Printf(t, args...)
+		shutdown(nil)
 	}
-	out := log_info
-	if status != 0 {
-		out = log_error
-	}
-	out.Printf(t+"\n", args...)
-	shutdown(status)
 }
 
 //go:embed usage
@@ -46,12 +41,12 @@ func run(o options) error {
 	if err != nil {
 		return fmt.Errorf("unable to open unix socket: %w", err)
 	}
-	onShutdown(func() { l.Close() })
+	onShutdown(func() error { return l.Close() })
 
 	server := http.Server{
 		Handler: new(handler),
 	}
-	onShutdown(func() { server.Shutdown(nil) })
+	onShutdown(func() error { return server.Shutdown(nil) })
 
 	// ??
 	start := time.Now()
@@ -71,10 +66,10 @@ func sigCancel(ctx context.Context) context.Context {
 	signal.Notify(c, os.Interrupt)
 
 	ctx, cancel := context.WithCancel(ctx)
-	onShutdown(cancel)
+	onShutdown(func() error { cancel(); return nil })
 	go func() {
 		<-c
-		shutdown()
+		shutdown(nil)
 	}()
 	return ctx
 }
