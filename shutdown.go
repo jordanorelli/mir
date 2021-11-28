@@ -1,8 +1,8 @@
 package main
 
 import (
-	"sync"
 	"os"
+	"sync"
 )
 
 var shutdownHandlers []func() error
@@ -17,9 +17,12 @@ func shutdown(cause error) {
 		} else {
 			log_info.Print("shutting down")
 		}
-		for _, f := range shutdownHandlers {
-			if err := f(); err != nil {
-				log_error.Printf("error in shutdown: %v", err)
+		if len(shutdownHandlers) > 0 {
+			for i := len(shutdownHandlers) - 1; i >= 0; i-- {
+				f := shutdownHandlers[i]
+				if err := f(); err != nil {
+					log_error.Printf("error in shutdown: %v", err)
+				}
 			}
 		}
 		os.Exit(status)

@@ -41,12 +41,15 @@ func run(o options) error {
 	if err != nil {
 		return fmt.Errorf("unable to open unix socket: %w", err)
 	}
-	onShutdown(func() error { return l.Close() })
+	os.Chmod(o.Path, 0777)
 
 	server := http.Server{
 		Handler: new(handler),
 	}
-	onShutdown(func() error { return server.Shutdown(nil) })
+	onShutdown(func() error {
+		log_info.Print("shutting down http server")
+		return server.Shutdown(context.TODO())
+	})
 
 	// ??
 	start := time.Now()
