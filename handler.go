@@ -1,24 +1,64 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
+	"os"
 	"time"
 
 	"golang.org/x/mod/module"
 	"golang.org/x/mod/zip"
+
+	"orel.li/modularium/internal/ref"
 )
 
 //go:embed meta
 var content embed.FS
 
 type handler struct {
+	path ref.Ref[string]
+	index ref.Ref[pathArg]
+}
+
+func (h handler) run() error {
+	addr, err := net.ResolveUnixAddr("unix", h.path.Val())
+	if err != nil {
+		return fmt.Errorf("bad listen address: %w", err)
+	}
+
+	l, err := net.ListenUnix("unix", addr)
+	if err != nil {
+		return fmt.Errorf("unable to open unix socket: %w", err)
+	}
+	os.Chmod(h.path.Val(), 0777)
+
+	server := http.Server{
+		Handler: h,
+	}
+	onShutdown(func() error {
+		log_info.Print("shutting down http server")
+		return server.Shutdown(context.TODO())
+	})
+
+	// ??
+	start := time.Now()
+	err = server.Serve(l)
+	if err != nil {
+		// I dunno how to check for the right error, offhand
+		if time.Since(start) < time.Second {
+			return fmt.Errorf("unable to start server: %v", err)
+		}
+	}
+	log_info.Printf("http serve result: %v", err)
+	return nil
 }
 
 func (h handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	log_info.Printf("%s %s", r.Method, r.URL.String())
+	log_info.Printf("%s %s %s", r.Method, r.Host, r.URL.String())
 
 	switch r.URL.Path {
 	case "/fart":
@@ -46,6 +86,7 @@ func (h handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	default:
 		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte("not found"))
 	}
 }
 

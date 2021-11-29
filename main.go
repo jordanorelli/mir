@@ -6,11 +6,10 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"net"
-	"net/http"
 	"os"
 	"os/signal"
-	"time"
+
+	"orel.li/modularium/internal/ref"
 )
 
 var log_error = log.New(os.Stderr, "", 0)
@@ -28,43 +27,6 @@ func bail(status int, t string, args ...interface{}) {
 //go:embed usage
 var usage string
 
-var options struct {
-	Path string
-}
-
-func run() error {
-	addr, err := net.ResolveUnixAddr("unix", options.Path)
-	if err != nil {
-		return fmt.Errorf("bad listen address: %w", err)
-	}
-
-	l, err := net.ListenUnix("unix", addr)
-	if err != nil {
-		return fmt.Errorf("unable to open unix socket: %w", err)
-	}
-	os.Chmod(options.Path, 0777)
-
-	server := http.Server{
-		Handler: new(handler),
-	}
-	onShutdown(func() error {
-		log_info.Print("shutting down http server")
-		return server.Shutdown(context.TODO())
-	})
-
-	// ??
-	start := time.Now()
-	err = server.Serve(l)
-	if err != nil {
-		// I dunno how to check for the right error, offhand
-		if time.Since(start) < time.Second {
-			return fmt.Errorf("unable to start server: %v", err)
-		}
-	}
-	log_info.Printf("http serve result: %v", err)
-	return nil
-}
-
 func sigCancel(ctx context.Context) context.Context {
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
@@ -79,20 +41,29 @@ func sigCancel(ctx context.Context) context.Context {
 }
 
 func main() {
-	flag.Parse()
+	sigCancel(context.Background())
+	root := flag.NewFlagSet("", flag.ExitOnError)
+	root.Parse(os.Args[1:])
 
-	ctx := context.Background()
-	ctx = sigCancel(ctx)
+	switch root.Arg(0) {
+	case "serve":
+		path := "/var/run/orel.li/http.sock"
+		index := pathArg{path: "./modules-index.json"}
+		h := handler{
+			path:  ref.New(&path),
+			index: ref.New(&index),
+		}
 
-	if len(os.Args) != 2 {
-		bail(1, usage)
+		serveFlags := flag.NewFlagSet("serve", flag.ExitOnError)
+		serveFlags.StringVar(&path, "l", path, "path for a unix domain socket to listen on")
+
+		serveFlags.Var(&index, "index", "an index config")
+		serveFlags.Parse(root.Args()[1:])
+
+		if err := h.run(); err != nil {
+			bail(1, err.Error())
+		}
+	default:
+		bail(0, usage)
 	}
-
-	if err := run(); err != nil {
-		bail(1, err.Error())
-	}
-}
-
-func init() {
-	flag.StringVar(&options.Path, "l", "./http.sock", "path for a unix domain socket to listen on ")
 }

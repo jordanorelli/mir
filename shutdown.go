@@ -14,10 +14,9 @@ func shutdown(cause error) {
 		if cause != nil {
 			status = 1
 			log_error.Printf("shutting down due to error: %v", cause)
-		} else {
-			log_info.Print("shutting down")
 		}
 		if len(shutdownHandlers) > 0 {
+			log_info.Print("shutting down")
 			for i := len(shutdownHandlers) - 1; i >= 0; i-- {
 				f := shutdownHandlers[i]
 				if err := f(); err != nil {
