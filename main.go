@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	_ "embed"
+	"flag"
 	"fmt"
 	"log"
 	"net"
@@ -27,12 +28,12 @@ func bail(status int, t string, args ...interface{}) {
 //go:embed usage
 var usage string
 
-type options struct {
+var options struct {
 	Path string
 }
 
-func run(o options) error {
-	addr, err := net.ResolveUnixAddr("unix", o.Path)
+func run() error {
+	addr, err := net.ResolveUnixAddr("unix", options.Path)
 	if err != nil {
 		return fmt.Errorf("bad listen address: %w", err)
 	}
@@ -41,7 +42,7 @@ func run(o options) error {
 	if err != nil {
 		return fmt.Errorf("unable to open unix socket: %w", err)
 	}
-	os.Chmod(o.Path, 0777)
+	os.Chmod(options.Path, 0777)
 
 	server := http.Server{
 		Handler: new(handler),
@@ -78,6 +79,8 @@ func sigCancel(ctx context.Context) context.Context {
 }
 
 func main() {
+	flag.Parse()
+
 	ctx := context.Background()
 	ctx = sigCancel(ctx)
 
@@ -85,9 +88,11 @@ func main() {
 		bail(1, usage)
 	}
 
-	var o options
-	o.Path = os.Args[1]
-	if err := run(o); err != nil {
+	if err := run(); err != nil {
 		bail(1, err.Error())
 	}
+}
+
+func init() {
+	flag.StringVar(&options.Path, "l", "./http.sock", "path for a unix domain socket to listen on ")
 }
