@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 
+	"orel.li/modularium/internal/index"
 	"orel.li/modularium/internal/ref"
 )
 
@@ -47,18 +48,24 @@ func main() {
 
 	switch root.Arg(0) {
 	case "serve":
-		path := "/var/run/orel.li/http.sock"
-		index := pathArg{path: "./modules-index.json"}
+		path := "./modularium.sock"
+		indexPath := pathArg{path: "./modules-index.json"}
 		h := handler{
 			path:  ref.New(&path),
-			index: ref.New(&index),
+			index: ref.New(&indexPath),
 		}
 
 		serveFlags := flag.NewFlagSet("serve", flag.ExitOnError)
 		serveFlags.StringVar(&path, "l", path, "path for a unix domain socket to listen on")
 
-		serveFlags.Var(&index, "index", "an index config")
+		serveFlags.Var(&indexPath, "index", "an index config")
 		serveFlags.Parse(root.Args()[1:])
+
+		idx, err := index.Load(indexPath.path)
+		if err != nil {
+			shutdown(err)
+		}
+		log_info.Printf("index: %v", idx)
 
 		if err := h.run(); err != nil {
 			bail(1, err.Error())

@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+
+while true; do
+    find . -type f -not -name modularium \
+        | grep -v '.git' \
+        | entr -c -d -r ./devloop
+    sleep 0.25
+done
+
