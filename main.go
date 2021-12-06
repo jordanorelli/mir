@@ -5,9 +5,14 @@ import (
 	_ "embed"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"os"
+	"path/filepath"
 	"os/signal"
+
+	"golang.org/x/mod/modfile"
+	"golang.org/x/mod/module"
 
 	"orel.li/modularium/internal/index"
 	"orel.li/modularium/internal/ref"
@@ -41,6 +46,64 @@ func sigCancel(ctx context.Context) context.Context {
 	return ctx
 }
 
+func serve(args []string) {
+	path := "./modularium.sock"
+	indexPath := pathArg{path: "./modules-index.json"}
+
+	serveFlags := flag.NewFlagSet("serve", flag.ExitOnError)
+	serveFlags.StringVar(&path, "l", path, "path for a unix domain socket to listen on")
+	serveFlags.Var(&indexPath, "index", "an index config")
+	serveFlags.Parse(args)
+
+	idx, err := index.Load(indexPath.path)
+	if err != nil {
+		shutdown(err)
+	}
+	log_info.Printf("index: %v", idx)
+
+	h := handler{
+		path:  ref.New(&path),
+		index: ref.New(&indexPath),
+	}
+	if err := h.run(); err != nil {
+		bail(1, err.Error())
+	}
+}
+
+func archive(args []string) {
+	var (
+		version string
+	)
+
+	flags := flag.NewFlagSet("archive", flag.ExitOnError)
+	flags.StringVar(&version, "version", "", "package version")
+	flags.Parse(args)
+	if version == "" {
+		bail(1, "target release version is required")
+	}
+
+	pkgdir := flags.Arg(0)
+	modfilePath := filepath.Join(pkgdir, "go.mod")
+	b, err := ioutil.ReadFile(modfilePath)
+	if err != nil {
+		bail(1, "unable to read modfile: %v", err)
+	}
+
+	log_info.Printf("checking modfile at path %q", modfilePath)
+	f, err := modfile.Parse(modfilePath, b, nil)
+	if err != nil {
+		bail(1, "unable to parse modfile: %v", err)
+	}
+	modpath := f.Module.Mod.Path
+	log_info.Print("parsed modfile")
+	log_info.Printf("module path in modfile: %s", modpath)
+	log_info.Printf("module major version in modfile: %s", f.Module.Mod.Version)
+	log_info.Printf("target release version: %s", version)
+	if err := module.Check(modpath, version); err != nil {
+		shutdown(err)
+	}
+}
+
 func main() {
 	sigCancel(context.Background())
 	root := flag.NewFlagSet("", flag.ExitOnError)
@@ -48,28 +111,9 @@ func main() {
 
 	switch root.Arg(0) {
 	case "serve":
-		path := "./modularium.sock"
-		indexPath := pathArg{path: "./modules-index.json"}
-		h := handler{
-			path:  ref.New(&path),
-			index: ref.New(&indexPath),
-		}
-
-		serveFlags := flag.NewFlagSet("serve", flag.ExitOnError)
-		serveFlags.StringVar(&path, "l", path, "path for a unix domain socket to listen on")
-
-		serveFlags.Var(&indexPath, "index", "an index config")
-		serveFlags.Parse(root.Args()[1:])
-
-		idx, err := index.Load(indexPath.path)
-		if err != nil {
-			shutdown(err)
-		}
-		log_info.Printf("index: %v", idx)
-
-		if err := h.run(); err != nil {
-			bail(1, err.Error())
-		}
+		serve(root.Args()[1:])
+	case "archive":
+		archive(root.Args()[1:])
 	default:
 		bail(0, usage)
 	}
