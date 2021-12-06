@@ -13,6 +13,7 @@ import (
 
 	"golang.org/x/mod/modfile"
 	"golang.org/x/mod/module"
+	"golang.org/x/mod/zip"
 
 	"orel.li/modularium/internal/index"
 	"orel.li/modularium/internal/ref"
@@ -70,13 +71,15 @@ func serve(args []string) {
 	}
 }
 
-func archive(args []string) {
+func zipcmd(args []string) {
 	var (
 		version string
+		outputPath string
 	)
 
-	flags := flag.NewFlagSet("archive", flag.ExitOnError)
+	flags := flag.NewFlagSet("zip", flag.ExitOnError)
 	flags.StringVar(&version, "version", "", "package version")
+	flags.StringVar(&outputPath, "o", "a.zip", "output file path")
 	flags.Parse(args)
 	if version == "" {
 		bail(1, "target release version is required")
@@ -102,6 +105,15 @@ func archive(args []string) {
 	if err := module.Check(modpath, version); err != nil {
 		shutdown(err)
 	}
+	zf, err := os.OpenFile(outputPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
+	if err != nil {
+		bail(1, "output file not opened: %v", err)
+	}
+
+	mv := module.Version{Path: modpath, Version: version}
+	if err := zip.CreateFromDir(zf, mv, pkgdir); err != nil {
+		bail(1, "zip not created: %v", err)
+	}
 }
 
 func main() {
@@ -112,8 +124,8 @@ func main() {
 	switch root.Arg(0) {
 	case "serve":
 		serve(root.Args()[1:])
-	case "archive":
-		archive(root.Args()[1:])
+	case "zip":
+		zipcmd(root.Args()[1:])
 	default:
 		bail(0, usage)
 	}
