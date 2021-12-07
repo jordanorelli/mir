@@ -1,4 +1,4 @@
-module orel.li/modularium
+module orel.li/modrn
 
 go 1.18
 
