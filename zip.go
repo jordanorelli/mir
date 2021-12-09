@@ -66,6 +66,7 @@ func zipcmd(args []string) {
 		outputPath = fmt.Sprintf("%s@%s.zip", modbasename(modpath), version)
 	}
 
+	// check that destination is available
 	log_info.Printf("destination: %s", outputPath)
 	switch _, err := os.Stat(outputPath); {
 	case err == nil:
@@ -76,13 +77,24 @@ func zipcmd(args []string) {
 		bail(1, "unable to check for file at %q: %v", outputPath, err)
 	}
 
-	zf, err := os.OpenFile(outputPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
+	zf, err := os.CreateTemp("", fmt.Sprintf("modrn_*_%s_%s.zip", modbasename(modpath), version))
 	if err != nil {
-		bail(1, "output file not opened: %v", err)
+		bail(1, "creating zip failed to get a temp file: %v", err)
 	}
+	defer zf.Close()
+
+	fi, err := zf.Stat()
+	if err != nil {
+		// is this even possible?
+		bail(1, "unable to stat resultant tempfile: %v", err)
+	}
+	abspath := filepath.Join(os.TempDir(), fi.Name())
+	log_info.Printf("zipping into temp file at %s", abspath)
 
 	mv := module.Version{Path: modpath, Version: version}
 	if err := zip.CreateFromDir(zf, mv, pkgdir); err != nil {
 		bail(1, "zip not created: %v", err)
 	}
+
+	log_info.Printf("created zip archive at %v", abspath)
 }
