@@ -3,28 +3,20 @@ package main
 import (
 	"flag"
 
-	"orel.li/mir/internal/index"
 	"orel.li/mir/internal/ref"
 )
 
 func serve(args []string) {
 	path := "./mir.sock"
-	indexPath := pathArg{path: "./modules-index.json"}
+	rootDir := "/srv/mir"
 
 	serveFlags := flag.NewFlagSet("serve", flag.ExitOnError)
 	serveFlags.StringVar(&path, "l", path, "path for a unix domain socket to listen on")
-	serveFlags.Var(&indexPath, "index", "an index config")
+	serveFlags.StringVar(&rootDir, "root", rootDir, "root directory for module storage")
 	serveFlags.Parse(args)
 
-	idx, err := index.Load(indexPath.path)
-	if err != nil {
-		shutdown(err)
-	}
-	log_info.Printf("index: %v", idx)
-
 	h := handler{
-		path:  ref.New(&path),
-		index: ref.New(&indexPath),
+		path: ref.New(&path),
 	}
 	if err := h.run(); err != nil {
 		bail(1, err.Error())
