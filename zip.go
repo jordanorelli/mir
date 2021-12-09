@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -44,7 +45,7 @@ func zipcmd(args []string) {
 		bail(1, "unable to read modfile: %v", err)
 	}
 
-	log_info.Printf("checking modfile at path %q", modfilePath)
+	log_info.Printf("checking modfile at path %s", modfilePath)
 	f, err := modfile.Parse(modfilePath, b, nil)
 	if err != nil {
 		bail(1, "unable to parse modfile: %v", err)
@@ -70,36 +71,29 @@ func zipcmd(args []string) {
 	log_info.Printf("destination: %s", outputPath)
 	switch _, err := os.Stat(outputPath); {
 	case err == nil:
-		bail(1, "a file at %q already exists", outputPath)
+		bail(1, "a file at %s already exists", outputPath)
 	case os.IsNotExist(err):
 		break
 	default:
-		bail(1, "unable to check for file at %q: %v", outputPath, err)
+		bail(1, "unable to check for file at %s: %v", outputPath, err)
 	}
 
-	zf, err := os.CreateTemp("", fmt.Sprintf("modrn_*_%s_%s.zip", modbasename(modpath), version))
-	if err != nil {
-		bail(1, "creating zip failed to get a temp file: %v", err)
-	}
-	defer zf.Close()
-
-	fi, err := zf.Stat()
-	if err != nil {
-		// is this even possible?
-		bail(1, "unable to stat resultant tempfile: %v", err)
-	}
-	abspath := filepath.Join(os.TempDir(), fi.Name())
-	log_info.Printf("zipping into temp file at %s", abspath)
-
+	// zip into memory
+	var buf bytes.Buffer
+	log_info.Printf("constructing zip in memory")
 	mv := module.Version{Path: modpath, Version: version}
-	if err := zip.CreateFromDir(zf, mv, pkgdir); err != nil {
+	if err := zip.CreateFromDir(&buf, mv, pkgdir); err != nil {
 		bail(1, "zip not created: %v", err)
 	}
 
-	// filepath.IsAbs
-	log_info.Printf("created zip archive at %v", abspath)
-	if err := os.Rename(abspath, outputPath); err != nil {
-		bail(1, "unable to move zip into place: %v", err)
+	fout, err := os.OpenFile(outputPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
+	if err != nil {
+		bail(1, "unable to open output file at path %s: %v", outputPath, err)
 	}
-	log_info.Printf("moved zip archive to %v", outputPath)
+	defer fout.Close()
+
+	if _, err := buf.WriteTo(fout); err != nil {
+		bail(1, "unable to write output file at path %s: %v", outputPath, err)
+	}
+	log_info.Printf("wrote archive to %s", outputPath)
 }
