@@ -1,4 +1,4 @@
-module orel.li/modrn
+module orel.li/mir
 
 go 1.18
 

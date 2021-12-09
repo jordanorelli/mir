@@ -3,8 +3,8 @@ package main
 import (
 	"flag"
 
-	"orel.li/modrn/internal/index"
-	"orel.li/modrn/internal/ref"
+	"orel.li/mir/internal/index"
+	"orel.li/mir/internal/ref"
 )
 
 func serve(args []string) {

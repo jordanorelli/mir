@@ -13,7 +13,7 @@ import (
 	"golang.org/x/mod/module"
 	"golang.org/x/mod/zip"
 
-	"orel.li/modrn/internal/ref"
+	"orel.li/mir/internal/ref"
 )
 
 //go:embed meta
