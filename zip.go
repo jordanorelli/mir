@@ -96,5 +96,10 @@ func zipcmd(args []string) {
 		bail(1, "zip not created: %v", err)
 	}
 
+	// filepath.IsAbs
 	log_info.Printf("created zip archive at %v", abspath)
+	if err := os.Rename(abspath, outputPath); err != nil {
+		bail(1, "unable to move zip into place: %v", err)
+	}
+	log_info.Printf("moved zip archive to %v", outputPath)
 }
