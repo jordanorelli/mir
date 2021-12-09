@@ -4,4 +4,4 @@ set -e
 
 /home/jordan/code/go/bin/go test
 /home/jordan/code/go/bin/go build
-./modularium serve
+./mir serve

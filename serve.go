@@ -8,7 +8,7 @@ import (
 )
 
 func serve(args []string) {
-	path := "./modularium.sock"
+	path := "./mir.sock"
 	indexPath := pathArg{path: "./modules-index.json"}
 
 	serveFlags := flag.NewFlagSet("serve", flag.ExitOnError)

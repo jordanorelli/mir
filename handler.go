@@ -89,7 +89,7 @@ func (h handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		err := zip.CreateFromDir(w, module.Version{
 			Path:    "orel.li/fart",
 			Version: "v0.0.3",
-		}, "/home/jorelli/modularium/modules/orel.li/fart")
+		}, "/home/jorelli/mir/modules/orel.li/fart")
 		if err != nil {
 			log_error.Printf("zip error: %v", err)
 		}

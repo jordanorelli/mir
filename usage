@@ -1,1 +1,8 @@
-modularium [listen-address]
+mir: a Go modules origin server
+
+Usage:
+    mir [command]
+
+Commands:
+    serve:   live module server
+    zip:     creates module zip files
