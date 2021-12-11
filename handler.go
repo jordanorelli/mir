@@ -2,10 +2,10 @@ package main
 
 import (
 	"context"
-	"embed"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"net"
 	"net/http"
@@ -17,9 +17,6 @@ import (
 
 	"golang.org/x/mod/semver"
 )
-
-//go:embed meta
-var content embed.FS
 
 // this is pretty janky, but I didn't want to import a routing library
 var (
@@ -116,6 +113,7 @@ func (h handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// $base/$module/@v/$version.info - get info about a specific version
 	if matches := infoP.FindStringSubmatch(r.URL.Path); matches != nil {
 		modpath := matches[1]
 		modversion := matches[2]
@@ -130,12 +128,13 @@ func (h handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// 	return
 	// }
 
-	// if matches := zipP.FindStringSubmatch(r.URL.Path); matches != nil {
-	// 	modpath := matches[1]
-	// 	modversion := matches[2]
-	// 	h.zipfile(modpath, modversion, w, r)
-	// 	return
-	// }
+	// $base/$module/@v/$version.zip - get the zip bundle of a package version
+	if matches := zipP.FindStringSubmatch(r.URL.Path); matches != nil {
+		modpath := matches[1]
+		modversion := matches[2]
+		h.zipfile(modpath, modversion, w, r)
+		return
+	}
 
 	w.WriteHeader(http.StatusNotFound)
 	w.Write([]byte("not found"))
@@ -306,21 +305,30 @@ func (h handler) info(modpath, modversion string, w http.ResponseWriter, r *http
 	})
 }
 
+func (h handler) openZip(modpath, version string) (io.ReadCloser, error) {
+	dirname, basename := filepath.Split(modpath)
+	absdir := filepath.Join(h.root, "modules", dirname)
+	fname := filepath.Join(absdir, fmt.Sprintf("%s@%s.zip", basename, version))
+	return os.Open(fname)
+}
+
 // modfile serves the $base/$module/@v/$version.mod endpoint
 func (h handler) modfile(modpath, modversion string, w http.ResponseWriter, r *http.Request) {
 }
 
 // zipfile serves the $base/$module/@v/$version.zip endpoint
 func (h handler) zipfile(modpath, modversion string, w http.ResponseWriter, r *http.Request) {
-}
-
-func serveFile(w http.ResponseWriter, path string) {
-	b, err := content.ReadFile(path)
+	zf, err := h.openZip(modpath, modversion)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w, err.Error())
+		writeError(w, err)
+		return
 	}
-	w.Write(b)
+	defer zf.Close()
+
+	w.Header().Add("Content-Type", "application/zip")
+	if _, err := io.Copy(w, zf); err != nil {
+		log_error.Printf("error writing zip for module %s version %s: %v", modpath, modversion, err)
+	}
 }
 
 type versionInfo struct {
