@@ -99,26 +99,29 @@ func (h handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	log_info.Printf("%s %s %s %s", r.Method, r.Host, r.URL.Host, r.URL.String())
 
 	// this is very stupid but I didn't want to add a routing library
-	// dependency for five endpoints
+	// dependency for five endpoints, since part of my goal is to not depend on
+	// anything with github.com in the import path.
 
-	if matches := latestP.FindStringSubmatch(r.URL.Path); matches != nil {
-		modpath := matches[1]
-		h.latest(modpath, w, r)
-		return
-	}
-
+	// $base/$module/@v/list - list versions for a module
 	if matches := listP.FindStringSubmatch(r.URL.Path); matches != nil {
 		modpath := matches[1]
 		h.list(modpath, w, r)
 		return
 	}
 
-	// if matches := infoP.FindStringSubmatch(r.URL.Path); matches != nil {
-	// 	modpath := matches[1]
-	// 	modversion := matches[2]
-	// 	h.info(modpath, modversion, w, r)
-	// 	return
-	// }
+	// $base/$module/@latest - get latest version number with timestamp
+	if matches := latestP.FindStringSubmatch(r.URL.Path); matches != nil {
+		modpath := matches[1]
+		h.latest(modpath, w, r)
+		return
+	}
+
+	if matches := infoP.FindStringSubmatch(r.URL.Path); matches != nil {
+		modpath := matches[1]
+		modversion := matches[2]
+		h.info(modpath, modversion, w, r)
+		return
+	}
 
 	// if matches := modP.FindStringSubmatch(r.URL.Path); matches != nil {
 	// 	modpath := matches[1]
@@ -264,10 +267,6 @@ func (h handler) latest(modpath string, w http.ResponseWriter, r *http.Request) 
 	}
 	log_info.Printf("all versions: %v", versions)
 
-	type Info struct {
-		Version string
-		Time    time.Time
-	}
 	last := versions[len(versions)-1]
 
 	fi, err := h.stat(modpath, last)
@@ -275,7 +274,7 @@ func (h handler) latest(modpath string, w http.ResponseWriter, r *http.Request) 
 		writeError(w, err)
 		return
 	}
-	json.NewEncoder(w).Encode(Info{
+	json.NewEncoder(w).Encode(moduleInfo{
 		Version: last,
 		Time:    fi.ModTime(),
 	})
@@ -290,12 +289,21 @@ func (h handler) list(modpath string, w http.ResponseWriter, r *http.Request) {
 	}
 
 	for _, version := range versions {
-		fmt.Fprint(w, version)
+		fmt.Fprintln(w, version)
 	}
 }
 
 // info serves the $base/$module/@v/$version.info endpoint
 func (h handler) info(modpath, modversion string, w http.ResponseWriter, r *http.Request) {
+	fi, err := h.stat(modpath, modversion)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	json.NewEncoder(w).Encode(moduleInfo{
+		Version: modversion,
+		Time:    fi.ModTime(),
+	})
 }
 
 // modfile serves the $base/$module/@v/$version.mod endpoint
