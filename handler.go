@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"embed"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -22,11 +23,11 @@ var content embed.FS
 
 // this is pretty janky, but I didn't want to import a routing library
 var (
-	latestP = regexp.MustCompile(`^/(.+)/@latest$`)
-	listP   = regexp.MustCompile(`^/(.+)/@v/list$`)
-	infoP   = regexp.MustCompile(`^/(.+)/@v/(.+)\.info$`)
-	modP    = regexp.MustCompile(`^/(.+)/@v/(.+)\.mod$`)
-	zipP    = regexp.MustCompile(`^/(.+)/@v/(.+)\.zip$`)
+	latestP = regexp.MustCompile(`^/dl/(.+)/@latest$`)
+	listP   = regexp.MustCompile(`^/dl/(.+)/@v/list$`)
+	infoP   = regexp.MustCompile(`^/dl/(.+)/@v/(.+)\.info$`)
+	modP    = regexp.MustCompile(`^/dl/(.+)/@v/(.+)\.mod$`)
+	zipP    = regexp.MustCompile(`^/dl/(.+)/@v/(.+)\.zip$`)
 )
 
 type handler struct {
@@ -100,11 +101,11 @@ func (h handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// this is very stupid but I didn't want to add a routing library
 	// dependency for five endpoints
 
-	// if matches := latestP.FindStringSubmatch(r.URL.Path); matches != nil {
-	// 	modpath := matches[1]
-	// 	h.latest(modpath, w, r)
-	// 	return
-	// }
+	if matches := latestP.FindStringSubmatch(r.URL.Path); matches != nil {
+		modpath := matches[1]
+		h.latest(modpath, w, r)
+		return
+	}
 
 	if matches := listP.FindStringSubmatch(r.URL.Path); matches != nil {
 		modpath := matches[1]
@@ -184,6 +185,7 @@ func (h handler) locate(modpath string) ([]os.DirEntry, error) {
 	return os.ReadDir(localDir)
 }
 
+// writeError writes a given error to an underlying http responsewriter
 func writeError(w http.ResponseWriter, err error) {
 	// this sucks and is wrong
 	if os.IsNotExist(err) {
@@ -228,7 +230,7 @@ func (h handler) getVersions(modpath string) ([]string, error) {
 		if filepath.Ext(name) != ".zip" {
 			continue
 		}
-		parts := strings.Split(name, "@")
+		parts := strings.Split(name[:len(name)-4], "@")
 		if len(parts) != 2 {
 			continue
 		}
@@ -245,9 +247,38 @@ func (h handler) getVersions(modpath string) ([]string, error) {
 	return allVersions, nil
 }
 
+func (h handler) stat(modpath, version string) (os.FileInfo, error) {
+	log_info.Printf("stat modpath: %s version: %s", modpath, version)
+	dirname, basename := filepath.Split(modpath)
+	absdir := filepath.Join(h.root, "modules", dirname)
+	fname := filepath.Join(absdir, fmt.Sprintf("%s@%s.zip", basename, version))
+	return os.Stat(fname)
+}
+
 // latest serves the @latest endpoint
 func (h handler) latest(modpath string, w http.ResponseWriter, r *http.Request) {
+	versions, err := h.getVersions(modpath)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	log_info.Printf("all versions: %v", versions)
 
+	type Info struct {
+		Version string
+		Time    time.Time
+	}
+	last := versions[len(versions)-1]
+
+	fi, err := h.stat(modpath, last)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	json.NewEncoder(w).Encode(Info{
+		Version: last,
+		Time:    fi.ModTime(),
+	})
 }
 
 // list serves the $base/$module/@v/list endpoint
