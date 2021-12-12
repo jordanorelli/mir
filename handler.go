@@ -1,6 +1,7 @@
 package main
 
 import (
+	"archive/zip"
 	"context"
 	"encoding/json"
 	"errors"
@@ -121,12 +122,13 @@ func (h handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// if matches := modP.FindStringSubmatch(r.URL.Path); matches != nil {
-	// 	modpath := matches[1]
-	// 	modversion := matches[2]
-	// 	h.modfile(modpath, modversion, w, r)
-	// 	return
-	// }
+	// $base/$module/@v/$version.mod - get go.mod file for a specific version
+	if matches := modP.FindStringSubmatch(r.URL.Path); matches != nil {
+		modpath := matches[1]
+		modversion := matches[2]
+		h.modfile(modpath, modversion, w, r)
+		return
+	}
 
 	// $base/$module/@v/$version.zip - get the zip bundle of a package version
 	if matches := zipP.FindStringSubmatch(r.URL.Path); matches != nil {
@@ -305,15 +307,34 @@ func (h handler) info(modpath, modversion string, w http.ResponseWriter, r *http
 	})
 }
 
-func (h handler) openZip(modpath, version string) (io.ReadCloser, error) {
+func (h handler) zipPath(modpath, version string) string {
 	dirname, basename := filepath.Split(modpath)
 	absdir := filepath.Join(h.root, "modules", dirname)
-	fname := filepath.Join(absdir, fmt.Sprintf("%s@%s.zip", basename, version))
-	return os.Open(fname)
+	return filepath.Join(absdir, fmt.Sprintf("%s@%s.zip", basename, version))
+}
+
+func (h handler) openZip(modpath, version string) (io.ReadCloser, error) {
+	return os.Open(h.zipPath(modpath, version))
 }
 
 // modfile serves the $base/$module/@v/$version.mod endpoint
 func (h handler) modfile(modpath, modversion string, w http.ResponseWriter, r *http.Request) {
+	rc, err := zip.OpenReader(h.zipPath(modpath, modversion))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	defer rc.Close()
+
+	mfname := fmt.Sprintf("%s@%s/go.mod", modpath, modversion)
+	f, err := rc.Open(mfname)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	defer f.Close()
+
+	io.Copy(w, f)
 }
 
 // zipfile serves the $base/$module/@v/$version.zip endpoint
