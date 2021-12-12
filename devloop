@@ -3,5 +3,5 @@
 set -e
 
 /home/jordan/code/go/bin/go test
-/home/jordan/code/go/bin/go build
-./mir serve
+/home/jordan/code/go/bin/go install
+mir serve -http :9000 -hostname orel.li
