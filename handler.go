@@ -3,6 +3,7 @@ package main
 import (
 	"archive/zip"
 	"context"
+	"crypto/md5"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -26,6 +27,7 @@ var (
 	infoP   = regexp.MustCompile(`^/dl/(.+)/@v/(.+)\.info$`)
 	modP    = regexp.MustCompile(`^/dl/(.+)/@v/(.+)\.mod$`)
 	zipP    = regexp.MustCompile(`^/dl/(.+)/@v/(.+)\.zip$`)
+	uploadP = regexp.MustCompile(`^/ul/(.+)/@v/(.+)\.zip$`)
 )
 
 type handler struct {
@@ -138,6 +140,13 @@ func (h handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if matches := uploadP.FindStringSubmatch(r.URL.Path); matches != nil {
+		modpath := matches[1]
+		modversion := matches[2]
+		h.upload(modpath, modversion, w, r)
+		return
+	}
+
 	w.WriteHeader(http.StatusNotFound)
 	w.Write([]byte("not found"))
 	return
@@ -168,7 +177,7 @@ func writeError(w http.ResponseWriter, err error) {
 	}
 
 	w.WriteHeader(http.StatusInternalServerError)
-	fmt.Fprintf(w, "internal server error")
+	fmt.Fprintf(w, "internal server error: %v", err)
 	log_error.Printf("500 %v", err)
 	return
 }
@@ -273,6 +282,12 @@ func (h handler) zipPath(modpath, version string) string {
 	return filepath.Join(absdir, fmt.Sprintf("%s@%s.zip", basename, version))
 }
 
+func (h handler) uploadPath(modpath, version string) string {
+	hash := md5.Sum([]byte(fmt.Sprintf("%s@%s", modpath, version)))
+	fname := fmt.Sprintf("%x.zip", hash)
+	return filepath.Join(h.root, "uploads", fname)
+}
+
 func (h handler) openZip(modpath, version string) (io.ReadCloser, error) {
 	return os.Open(h.zipPath(modpath, version))
 }
@@ -312,6 +327,59 @@ func (h handler) zipfile(modpath, modversion string, w http.ResponseWriter, r *h
 	if _, err := io.Copy(w, zf); err != nil {
 		log_error.Printf("error writing zip for module %s version %s: %v", modpath, modversion, err)
 	}
+}
+
+func (h handler) upload(modpath, modversion string, w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		writeError(w, apiError(http.StatusMethodNotAllowed))
+		return
+	}
+
+	p, err := h.doUpload(modpath, modversion, r)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+
+	if err := h.verifyUpload(modpath, modversion, p); err != nil {
+		writeError(w, err)
+		return
+	}
+
+	if err := os.Rename(p, h.zipPath(modpath, modversion)); err != nil {
+		writeError(w, fmt.Errorf("unable to move upload into place: %w", err))
+		return
+	}
+	w.Write([]byte("ok"))
+}
+
+func (h handler) doUpload(modpath, modversion string, r *http.Request) (string, error) {
+	p := h.uploadPath(modpath, modversion)
+	f, err := os.Create(p)
+	if err != nil {
+		return "", fmt.Errorf("unable to open destination path: %w", err)
+	}
+	defer f.Close()
+
+	if _, err := io.Copy(f, r.Body); err != nil {
+		return "", fmt.Errorf("failed to write upload file locally: %w", err)
+	}
+	return p, nil
+}
+
+func (h handler) verifyUpload(modpath, modversion, fpath string) error {
+	rc, err := zip.OpenReader(fpath)
+	if err != nil {
+		return fmt.Errorf("unable to verify upload: %w", err)
+	}
+
+	prefix := fmt.Sprintf("%s@%s/", modpath, modversion)
+	for _, f := range rc.File {
+		if !strings.HasPrefix(f.Name, prefix) {
+			return fmt.Errorf("zip contains file with bad name: %w", err)
+		}
+	}
+	return nil
 }
 
 type versionInfo struct {
