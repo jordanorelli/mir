@@ -335,6 +335,12 @@ func (h handler) upload(modpath, modversion string, w http.ResponseWriter, r *ht
 		return
 	}
 
+	_, _, ok := r.BasicAuth()
+	if !ok {
+		writeError(w, apiError(http.StatusUnauthorized))
+		return
+	}
+
 	dest := h.zipPath(modpath, modversion)
 	if _, err := os.Stat(dest); !errors.Is(err, fs.ErrNotExist) {
 		writeError(w, apiError(http.StatusConflict))
