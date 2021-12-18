@@ -48,6 +48,8 @@ func main() {
 		serve(root.Args()[1:])
 	case "zip":
 		zipcmd(root.Args()[1:])
+	case "pwhash":
+		pwhashcmd(root.Args()[1:])
 	default:
 		bail(0, usage)
 	}

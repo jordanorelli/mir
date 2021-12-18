@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/mod/semver"
 )
 
@@ -35,6 +36,7 @@ type handler struct {
 	socketPath string
 	root       string
 	hostname   string
+	auth       map[string]string
 }
 
 func (h handler) run() error {
@@ -335,9 +337,20 @@ func (h handler) upload(modpath, modversion string, w http.ResponseWriter, r *ht
 		return
 	}
 
-	_, _, ok := r.BasicAuth()
+	user, pass, ok := r.BasicAuth()
 	if !ok {
 		writeError(w, apiError(http.StatusUnauthorized))
+		return
+	}
+
+	hash := h.auth[user]
+	if hash == "" {
+		writeError(w, apiError(http.StatusUnauthorized))
+		return
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(pass)); err != nil {
+		writeError(w, fmt.Errorf("%v: %w", err, apiError(http.StatusUnauthorized)))
 		return
 	}
 
