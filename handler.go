@@ -335,6 +335,12 @@ func (h handler) upload(modpath, modversion string, w http.ResponseWriter, r *ht
 		return
 	}
 
+	dest := h.zipPath(modpath, modversion)
+	if _, err := os.Stat(dest); !errors.Is(err, fs.ErrNotExist) {
+		writeError(w, apiError(http.StatusConflict))
+		return
+	}
+
 	p, err := h.doUpload(modpath, modversion, r)
 	if err != nil {
 		writeError(w, err)
@@ -346,7 +352,7 @@ func (h handler) upload(modpath, modversion string, w http.ResponseWriter, r *ht
 		return
 	}
 
-	if err := os.Rename(p, h.zipPath(modpath, modversion)); err != nil {
+	if err := os.Rename(p, dest); err != nil {
 		writeError(w, fmt.Errorf("unable to move upload into place: %w", err))
 		return
 	}
@@ -355,12 +361,14 @@ func (h handler) upload(modpath, modversion string, w http.ResponseWriter, r *ht
 
 func (h handler) doUpload(modpath, modversion string, r *http.Request) (string, error) {
 	p := h.uploadPath(modpath, modversion)
+	log_info.Printf("uploading to %v", p)
 	f, err := os.Create(p)
 	if err != nil {
 		return "", fmt.Errorf("unable to open destination path: %w", err)
 	}
 	defer f.Close()
 
+	log_info.Printf("copying body data to %v", p)
 	if _, err := io.Copy(f, r.Body); err != nil {
 		return "", fmt.Errorf("failed to write upload file locally: %w", err)
 	}
@@ -368,6 +376,7 @@ func (h handler) doUpload(modpath, modversion string, r *http.Request) (string, 
 }
 
 func (h handler) verifyUpload(modpath, modversion, fpath string) error {
+	log_info.Printf("verifying upload data")
 	rc, err := zip.OpenReader(fpath)
 	if err != nil {
 		return fmt.Errorf("unable to verify upload: %w", err)
@@ -379,6 +388,7 @@ func (h handler) verifyUpload(modpath, modversion, fpath string) error {
 			return fmt.Errorf("zip contains file with bad name: %w", err)
 		}
 	}
+	log_info.Printf("upload data verified")
 	return nil
 }
 
