@@ -5,13 +5,17 @@ import (
 	_ "embed"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/signal"
 )
 
-var log_error = log.New(os.Stderr, "", 0)
-var log_info = log.New(os.Stdout, "", 0)
+var (
+	log_error = log.New(os.Stderr, "", 0)
+	log_info  = log.New(os.Stdout, "", 0)
+	log_debug = log.New(io.Discard, "", 0)
+)
 
 func bail(status int, t string, args ...interface{}) {
 	if status != 0 {
@@ -39,17 +43,40 @@ func sigCancel(ctx context.Context) context.Context {
 }
 
 func main() {
+	var (
+		quiet   bool
+		verbose bool
+	)
+
 	sigCancel(context.Background())
 	root := flag.NewFlagSet("", flag.ExitOnError)
+	root.BoolVar(&quiet, "q", false, "suppress non-error output")
+	root.BoolVar(&verbose, "v", false, "show additional debug output")
 	root.Parse(os.Args[1:])
+
+	if quiet {
+		log_info = log.New(io.Discard, "", 0)
+	}
+	if !quiet && verbose {
+		log_debug = log.New(os.Stdout, "", 0)
+	}
+
+	rest := root.Args()[1:]
 
 	switch root.Arg(0) {
 	case "serve":
-		serve(root.Args()[1:])
+		serve(rest)
 	case "zip":
-		zipcmd(root.Args()[1:])
+		zipcmd(rest)
 	case "pwhash":
-		pwhashcmd(root.Args()[1:])
+		pwhashcmd(rest)
+	case "next":
+		nextcmd(rest)
+		// mir next major
+		// mir next minor
+		// mir next patch
+		// mir next pre fartstorm
+
 	default:
 		bail(0, usage)
 	}
