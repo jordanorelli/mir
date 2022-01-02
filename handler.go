@@ -18,7 +18,8 @@ import (
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
-	"golang.org/x/mod/semver"
+
+	"orel.li/mir/internal/semver"
 )
 
 // this is pretty janky, but I didn't want to import a routing library

@@ -13,8 +13,9 @@ import (
 	"strings"
 
 	"golang.org/x/mod/modfile"
-	"golang.org/x/mod/semver"
 	"golang.org/x/net/html"
+
+	"orel.li/mir/internal/semver"
 )
 
 func nextcmd(args []string) {
@@ -208,3 +209,10 @@ func parseVersionLines(r io.Reader) ([]string, error) {
 		}
 	}
 }
+
+// nextMinor takes a sorted list of version strings and returns a string
+// representing the next minor version
+// func nextMinor(versions []string) string {
+// 	last := "v0.0.0"
+// 	semver.MajorMinor
+// }
